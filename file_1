@@ -1,0 +1,101 @@
+import tkinter as tk
+import serial  # For communication with Arduino
+import time
+import requests
+import threading
+import queue
+from random import randint
+
+# Helper function: Convert hex to RGB
+def hex_to_rgb(hex_color):
+    hex_color = hex_color.lstrip('#')
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
+# Helper function: Convert RGB to hex
+def rgb_to_hex(rgb_color):
+    return "#{:02x}{:02x}{:02x}".format(rgb_color[0], rgb_color[1], rgb_color[2])
+
+# Interpolate between two RGB colors
+def interpolate_color(color1, color2, t):
+    return tuple(int(color1[i] + (color2[i] - color1[i]) * t) for i in range(3))
+
+# Function to animate the transition between palettes
+def animate_palette_stream(current_palette, next_palette, step):
+    for i in range(len(current_palette)):
+        rgb_current = hex_to_rgb(current_palette[i])
+        rgb_next = hex_to_rgb(next_palette[i])
+
+        t = step / steps
+        interpolated_color = interpolate_color(rgb_current, rgb_next, t)
+        hex_interpolated = rgb_to_hex(interpolated_color)
+
+        palette_labels[i].config(text=hex_interpolated, bg=hex_interpolated)
+
+    if step < steps:
+        root.after(delay, animate_palette_stream, current_palette, next_palette, step + 1)
+
+# Function to generate a color palette from sensor values
+def generate_palette(sensor_value):
+    # Use sensor value to determine HSL (for demonstration purposes)
+    hue = sensor_value * 9
+    url = f'https://www.thecolorapi.com/scheme?hsl=hsl({hue},50%,50%)&count=3&format=json&mode=analogic'
+    
+    try:
+        r = requests.get(url)
+        r.raise_for_status()  # Raise an error for bad responses
+        palette = [color['hex']['value'] for color in r.json()['colors']]
+        #print("Generated Palette:", palette)  # Debugging print
+        return palette
+    except (requests.RequestException, ValueError) as e:
+        print("Error fetching colors:", e)
+        return current_palette  # Return the current palette on error
+
+# Threaded function to read sensor data from Arduino
+def read_sensor_data(ser, data_queue):
+    while True:
+        if ser.in_waiting > 0:
+            line = ser.readline().decode('utf-8').rstrip()  # Read sensor value from Arduino
+            #print("Sensor Reading:", line)  # Debugging print
+            try:
+                sensor_value = int(line)
+                data_queue.put(sensor_value)  # Add the sensor value to the queue
+            except ValueError:
+                print("Invalid sensor value received.")  # Debugging print
+        time.sleep(0.1)  # Small delay to prevent overwhelming the serial buffer
+
+# Function to check for new sensor data and trigger palette update
+def check_for_new_data():
+    if not data_queue.empty():
+        sensor_value = data_queue.get()  # Get the latest sensor value
+        new_palette = generate_palette(sensor_value)
+        animate_palette_stream(current_palette, new_palette, 0)
+        current_palette[:] = new_palette  # Update the current palette
+    root.after(100, check_for_new_data)  # Schedule the next check
+
+# Set up serial communication with Arduino
+ser = serial.Serial('COM3', 9600)  # Change 'COM3' to your Arduino's port
+time.sleep(2)  # Wait for the connection to stabilize
+ser.flushInput()  # Flush the input buffer to clear any initial data
+ser.reset_input_buffer()
+
+# Set up the initial color palette
+current_palette = ['#FFFFFF', '#FFFFFF', '#FFFFFF']  # Start palette (white)
+
+# Parameters for the animation
+steps = 10  # Number of steps for the animation
+delay = 10  # Delay between animation frames (in ms)
+
+# Create the main window
+root = tk.Tk()
+root.title("Arduino Sensor-Based Palette Animation")
+
+# Create labels for each color in the palette (3 colors)
+palette_labels = []
+for i in range(3):
+    label = tk.Label(root, text="", font=("Arial", 24), width=20, height=5)
+    label.pack(pady=10)
+    palette_labels.append(label)
+
+# Queue to communicate between threads
+data_queue = queue.Queue()
+... (20 lines left)
