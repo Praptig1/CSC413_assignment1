@@ -1,0 +1,35 @@
+#include<LiquidCrystal.h>
+
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+
+int potMin = 0;
+int potMax = 1023;
+int potRead = 0;
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+  lcd.begin(16, 2);
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  int potRead = analogRead(A0);
+  potRead = map(potRead, potMin, potMax, 0, 40);
+
+  Serial.println(potRead);
+
+  lcd.setCursor(0,0);
+  lcd.print("Temperature (C)");
+  
+  lcd.setCursor(0,1);                                                                                          
+  if (potRead < 10) lcd.print("   ");                  
+  else if (potRead < 100) lcd.print("  ");
+  else if (potRead < 1000) lcd.print(' ');
+
+lcd.print(potRead, DEC);
+
+
+  delay(500);  
+
+}
